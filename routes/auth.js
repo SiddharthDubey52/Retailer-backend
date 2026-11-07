@@ -25,6 +25,7 @@ function setSession(response, user) {
     maxAge: 12 * 60 * 60 * 1000,
     path: '/',
   })
+  return token
 }
 
 router.get('/status', async (_request, response, next) => {
@@ -47,8 +48,8 @@ router.post('/setup', async (request, response, next) => {
       passwordHash: await bcrypt.hash(parsed.data.password, 12),
       ...(parsed.data.email && { email: parsed.data.email.toLowerCase() }),
     })
-    setSession(response, user)
-    response.status(201).json({ user: { id: user.id, name: user.name, username: user.username, email: user.email } })
+    const token = setSession(response, user)
+    response.status(201).json({ token, user: { id: user.id, name: user.name, username: user.username, email: user.email } })
   } catch (error) { next(error) }
 })
 
@@ -61,8 +62,8 @@ router.post('/login', async (request, response, next) => {
     if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
       return response.status(401).json({ message: 'Username or password is incorrect.' })
     }
-    setSession(response, user)
-    response.json({ user: { id: user.id, name: user.name, username: user.username, email: user.email } })
+    const token = setSession(response, user)
+    response.json({ token, user: { id: user.id, name: user.name, username: user.username, email: user.email } })
   } catch (error) { next(error) }
 })
 
