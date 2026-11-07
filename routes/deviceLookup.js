@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { TacRecord } from '../models/index.js'
-import { importOsmocomTacDatabase } from '../services/osmocomTac.js'
+import { importAllFreeTacSources } from '../services/freeTacSources.js'
 import { lookupWithHiCellTek } from '../services/hiCellTek.js'
 import { isValidImei } from '../validation.js'
 
@@ -77,7 +77,7 @@ router.get('/tac/:tac', async (request, response, next) => {
 
 router.post('/import', async (_request, response, next) => {
   try {
-    response.status(200).json(await importOsmocomTacDatabase())
+    response.status(200).json(await importAllFreeTacSources())
   } catch (error) { next(error) }
 })
 

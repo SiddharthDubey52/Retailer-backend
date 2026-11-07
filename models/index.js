@@ -50,6 +50,7 @@ const inventorySchema = new Schema({
   color: { type: String, trim: true, default: '' },
   imei1: { type: String, required: true, trim: true },
   imei2: { type: String, trim: true, default: '' },
+  serialNumber: { type: String, trim: true, maxlength: 60, default: '' },
   imeiKeys: { type: [String], required: true },
   dealer: { type: Schema.Types.ObjectId, ref: 'Dealer', default: null },
   dealerName: { type: String, trim: true, default: '' },

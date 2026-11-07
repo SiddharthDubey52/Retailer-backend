@@ -14,6 +14,7 @@ const deviceSchema = z.object({
   color: z.string().trim().max(50).optional().default(''),
   imei1: z.string().refine(isValidImei, 'Enter a valid 15-digit IMEI.'),
   imei2: z.union([z.string().refine(isValidImei), z.literal('')]).optional().default(''),
+  serialNumber: z.string().trim().max(60).optional().default(''),
   dealer: z.string().optional().default(''),
   dealerName: z.string().trim().max(120).optional().default(''),
   invoiceNumber: z.string().trim().max(80).optional().default(''),
@@ -29,6 +30,7 @@ const deviceUpdateSchema = z.object({
   color: z.string().trim().max(50).optional(),
   imei1: z.string().refine(isValidImei).optional(),
   imei2: z.union([z.string().refine(isValidImei), z.literal('')]).optional(),
+  serialNumber: z.string().trim().max(60).optional(),
   dealer: z.string().optional(),
   dealerName: z.string().trim().max(120).optional(),
   invoiceNumber: z.string().trim().max(80).optional(),
@@ -46,6 +48,7 @@ router.get('/', async (request, response, next) => {
       { brand: { $regex: search, $options: 'i' } },
       { model: { $regex: search, $options: 'i' } },
       { modelNumber: { $regex: search, $options: 'i' } },
+      { serialNumber: { $regex: search, $options: 'i' } },
       { dealerName: { $regex: search, $options: 'i' } },
     ]
     if (request.query.ram) query.ram = request.query.ram
