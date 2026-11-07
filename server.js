@@ -15,7 +15,7 @@ import reportRoutes from './routes/reports.js'
 import deviceLookupRoutes from './routes/deviceLookup.js'
 
 const app = express()
-const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim())
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean)
 
 app.set('trust proxy', 1)
 app.use(helmet())
