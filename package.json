@@ -16,6 +16,7 @@
     "import:tac:dry": "node scripts/importTacDatabase.js --dry-run",
     "test:tac": "node scripts/testTacSystem.js",
     "pin:reset": "node scripts/resetFinancialPin.js",
+    "fresh:start": "node --no-warnings scripts/freshStart.js",
     "test:financial": "node scripts/testFinancialAndStockOut.js",
     "test:invoices": "node scripts/testPurchaseInvoices.js",
     "tac:migrate": "node scripts/migrateTacToCluster.js"
