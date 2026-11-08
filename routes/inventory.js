@@ -47,6 +47,20 @@ const deviceUpdateSchema = z.object({
 const INVOICE_MANAGED = ['dealer', 'dealerName', 'invoiceNumber', 'purchaseDate']
 const sendKnown = (response, error) => response.status(error.status).json({ code: error.code, message: error.message })
 
+// An IMEI belongs to one physical phone forever: a record in stock or already sold blocks it.
+// Sold phones stay in this collection, so one lookup (backed by the unique imeiKeys index) covers both.
+async function imeiConflict(imeiKeys, excludeId) {
+  const found = await Inventory.findOne({ imeiKeys: { $in: imeiKeys }, ...(excludeId && { _id: { $ne: excludeId } }) }).select('brand model imeiKeys status').lean()
+  if (!found) return null
+  const imei = imeiKeys.find((key) => found.imeiKeys.includes(key))
+  return {
+    code: 'IMEI_ALREADY_EXISTS',
+    status: found.status,
+    message: `IMEI ${imei} ${found.status === 'SOLD' ? 'has already been sold' : 'is already in stock'} (${found.brand} ${found.model}). The same IMEI cannot be added again.`,
+  }
+}
+const SAME_IMEI_TWICE = { code: 'IMEI_REPEATED', message: 'IMEI 1 and IMEI 2 must be different.' }
+
 router.get('/', async (request, response, next) => {
   try {
     const { page, limit, skip } = pagination(request)
@@ -85,7 +99,8 @@ router.get('/check-imei', async (request, response, next) => {
   try {
     const imei = String(request.query.imei || '').replace(/\D/g, '')
     if (!isValidImei(imei)) return response.status(400).json({ message: 'Enter a valid 15-digit IMEI.' })
-    response.json({ exists: Boolean(await Inventory.exists({ imeiKeys: imei })) })
+    const conflict = await imeiConflict([imei])
+    response.json({ exists: Boolean(conflict), status: conflict?.status || null, message: conflict?.message || null })
   } catch (error) { next(error) }
 })
 
@@ -133,9 +148,10 @@ router.post('/', async (request, response, next) => {
     // Entering a purchase price is a protected financial action.
     if (!(await financialAccess(request)).granted) return response.status(403).json(LOCKED_RESPONSE)
     if (!purchaseInvoiceId && !data.purchaseDate) return response.status(400).json({ message: 'Enter the purchase date or select a purchase invoice.' })
-    const imeiKeys = [...new Set([data.imei1, data.imei2].filter(Boolean))]
-    const duplicate = await Inventory.findOne({ imeiKeys: { $in: imeiKeys } }).select('imei1 imei2')
-    if (duplicate) return response.status(409).json({ message: 'This IMEI is already recorded in inventory.' })
+    if (data.imei1 === data.imei2) return response.status(400).json(SAME_IMEI_TWICE)
+    const imeiKeys = [data.imei1, data.imei2].filter(Boolean)
+    const duplicate = await imeiConflict(imeiKeys)
+    if (duplicate) return response.status(409).json({ code: duplicate.code, message: duplicate.message })
     let dealer = null
     if (!purchaseInvoiceId && data.dealer) {
       dealer = await Dealer.findById(data.dealer).select('name')
@@ -189,11 +205,13 @@ router.patch('/:id', async (request, response, next) => {
     if (changes.imei1 || changes.imei2 !== undefined) {
       changes.imei1 ??= current.imei1
       changes.imei2 ??= current.imei2
-      const imeiKeys = [...new Set([changes.imei1, changes.imei2].filter(Boolean))]
-      const duplicate = await Inventory.findOne({ _id: { $ne: current.id }, imeiKeys: { $in: imeiKeys } })
-      if (duplicate) return response.status(409).json({ message: 'This IMEI is already recorded in inventory.' })
+      if (changes.imei1 === changes.imei2) return response.status(400).json(SAME_IMEI_TWICE)
+      const imeiKeys = [changes.imei1, changes.imei2].filter(Boolean)
+      const duplicate = await imeiConflict(imeiKeys, current._id)
+      if (duplicate) return response.status(409).json({ code: duplicate.code, message: duplicate.message })
       changes.imeiKeys = imeiKeys
     }
+    if (changes.dealer === '') changes.dealer = null // cleared: the manual dealer name is used instead
     if (changes.dealer) {
       const dealer = await Dealer.findById(changes.dealer)
       if (!dealer) return response.status(400).json({ message: 'Selected dealer was not found.' })

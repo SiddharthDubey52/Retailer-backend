@@ -53,6 +53,8 @@ const port = Number(process.env.PORT) || 5000
 try {
   if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is required to start the API')
   await connectMainDatabase()
+  // Make sure the unique IMEI index really exists before accepting requests.
+  await Inventory.init().catch((error) => console.error(`IMEI unique index could not be built: ${error.message}`))
   // The TAC cluster connects independently; if it is down the API still starts and retries in the background.
   connectTacDatabase({ required: false }).catch(() => {})
   // One-time, idempotent backfill for quick stock-out search on records created before imeiLastSix existed.

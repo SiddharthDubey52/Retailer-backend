@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "import:tac:dry": "node scripts/importTacDatabase.js --dry-run",
     "test:tac": "node scripts/testTacSystem.js",
+    "test:crud": "node --no-warnings scripts/testImeiAndCrud.js",
     "pin:reset": "node scripts/resetFinancialPin.js",
     "fresh:start": "node --no-warnings scripts/freshStart.js",
     "test:financial": "node scripts/testFinancialAndStockOut.js",
