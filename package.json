@@ -3,14 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": "^20.19.0 || ^22.13.0 || >=24" },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "import:tac": "node scripts/importOsmocomTac.js",
+    "import:tac": "node scripts/importTacDatabase.js",
     "admin:update": "node scripts/updateAdminCredentials.js",
     "test:smoke": "node scripts/smokeTest.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "import:tac:dry": "node scripts/importTacDatabase.js --dry-run",
+    "test:tac": "node scripts/testTacSystem.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

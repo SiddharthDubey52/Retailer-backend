@@ -18,6 +18,10 @@ let dealerId
 let inventoryId
 let saleId
 let imei
+let lookupImei
+let identifiedInventoryId
+let createdIdentifiedModel = false
+let identifiedModel
 const results = []
 const testStartedAt = new Date()
 
@@ -43,8 +47,8 @@ async function request(path, { method = 'GET', body, cookie } = {}) {
   return { response, data }
 }
 
-function makeValidImei() {
-  const digits = Array.from({ length: 14 }, () => crypto.randomInt(0, 10).toString()).join('')
+function makeValidImei(prefix = '') {
+  const digits = `${prefix}${Array.from({ length: 14 - prefix.length }, () => crypto.randomInt(0, 10).toString()).join('')}`
   let sum = 0
   let doubleDigit = true
   for (let index = digits.length - 1; index >= 0; index -= 1) {
@@ -71,8 +75,8 @@ try {
   record('first-admin status', setupStatus.data?.setupRequired === (existingUserCount === 0))
   const unauthenticated = await request('/dashboard')
   record('protected route rejects unauthenticated requests', unauthenticated.response.status === 401)
-  const invalidLookup = await request('/device-lookup', { method: 'POST', body: { imei: '490154203237519' } })
-  record('invalid IMEI rejected by lookup', invalidLookup.response.status === 400)
+  const anonymousLookup = await request('/device-lookup', { method: 'POST', body: { imei: '490154203237519' } })
+  record('device lookup requires a session', anonymousLookup.response.status === 401)
 
   let cookie
   if (!existingUserCount) {
@@ -97,8 +101,22 @@ try {
   const me = await request('/auth/me', { cookie })
   record('session authenticates /me', me.response.status === 200 && me.data?.user?.id === userId)
 
-  const localLookup = await request('/device-lookup', { method: 'POST', body: { imei: '490154203237518' }, cookie })
-  record('local TAC lookup', localLookup.data?.success && localLookup.data.source === 'local_database' && localLookup.data.data?.brandName?.toUpperCase() === 'NOKIA' && Boolean(localLookup.data.data?.deviceName))
+  const invalidLookup = await request('/device-lookup', { method: 'POST', body: { imei: '490154203237519' }, cookie })
+  record('invalid IMEI rejected by lookup', invalidLookup.response.status === 400)
+  // TAC 35073866 is complete in the local TACRecords collection, so no HiCellTek quota is used.
+  lookupImei = makeValidImei('35073866')
+  const localLookup = await request('/device-lookup', { method: 'POST', body: { imei: lookupImei }, cookie })
+  const found = localLookup.data?.data
+  record('local TAC lookup (complete record, no API call)', localLookup.response.status === 200 && localLookup.data?.source === 'local_database' && localLookup.data?.complete === true && Boolean(found?.brandName && found?.deviceName && found?.modelNumber), JSON.stringify(localLookup.data))
+  identifiedModel = { brand: found.brandName, model: found.deviceName, modelNumber: found.modelNumber }
+  createdIdentifiedModel = !(await DeviceModel.exists(identifiedModel))
+  const identifiedPurchase = await request('/inventory', {
+    method: 'POST',
+    body: { ...identifiedModel, imei1: lookupImei, ram: '8 GB', storage: '256 GB', color: 'Smoke Grey', purchaseDate: new Date().toISOString(), purchasePrice: 500, invoiceNumber: 'SMOKE-LOOKUP' },
+    cookie,
+  })
+  identifiedInventoryId = identifiedPurchase.data?.item?._id
+  record('stock-in after identification', identifiedPurchase.response.status === 201 && identifiedPurchase.data.item.brand === found.brandName && identifiedPurchase.data.item.modelNumber === found.modelNumber, `HTTP ${identifiedPurchase.response.status}`)
   const baselineDashboard = await request('/dashboard', { cookie })
   const baselineReport = await request('/reports?page=1&limit=1', { cookie })
   const baselineSales = await request('/sales?page=1&limit=1', { cookie })
@@ -181,6 +199,12 @@ try {
     await Sale.deleteOne({ _id: saleId }).catch(() => {})
   }
   if (inventoryId) await Inventory.deleteOne({ _id: inventoryId }).catch(() => {})
+  if (identifiedInventoryId) await Inventory.deleteOne({ _id: identifiedInventoryId }).catch(() => {})
+  if (lookupImei) await AuditLog.deleteMany({ 'changes.imei1': lookupImei }).catch(() => {})
+  if (createdIdentifiedModel && identifiedModel) {
+    const stillUsed = await Inventory.exists({ brand: identifiedModel.brand, model: identifiedModel.model, modelNumber: identifiedModel.modelNumber }).catch(() => true)
+    if (!stillUsed) await DeviceModel.deleteMany({ ...identifiedModel, createdAt: { $gte: testStartedAt } }).catch(() => {})
+  }
   if (dealerId) await Dealer.deleteOne({ _id: dealerId }).catch(() => {})
   if (userId) await AuditLog.deleteMany({ actor: userId, createdAt: { $gte: testStartedAt } }).catch(() => {})
   if (createdUser && userId) await User.deleteOne({ _id: userId }).catch(() => {})

@@ -40,3 +40,20 @@ The smoke suite preserves existing users and deletes its temporary dealer, inven
 - Verify a HiCellTek positive-match TAC on the account's plan; the tested response was not found, so no real positive mapping was available.
 - Test date filters and browser print/PDF in the hosted application.
 - Create a dedicated backend GitHub repository and push only `backend/`; no GitHub or Render account access was available in this session.
+
+## Hybrid TAC lookup verification (2026-11-08)
+
+| Test | Status | Notes |
+| --- | --- | --- |
+| TAC import into `TACRecords` | PASS | 275,847 unique TACs (MoazEb commit 495795d7937d + Osmocom sha256:bfeab20ab813), 0 write errors. 64,691 complete; 211,156 lack a model number in the source data. |
+| Repeated import | PASS | Second full run: 0 inserted, 0 updated, 275,847 unchanged. |
+| Duplicate / conflicting / multi-source import | PASS | `npm run test:tac` on temporary collections (dropped afterwards). |
+| 1. Complete local TAC | PASS | HTTP: 35073866 → Samsung / Galaxy S24 / SM-S921B/DS, `local_database`, no API call. |
+| 2–3. HiCellTek fallback (live) | PASS | HTTP: 35696945 (local record has no model number) → `hicelltek_api`; HiCellTek returned model_info "VMA". |
+| 4. Neither source | PASS (mock) | 404 `manual_entry`. |
+| 5. Invalid IMEI | PASS | HTTP 400. |
+| 6. Invalid HiCellTek key (live) | PASS | Real 401 from HiCellTek → partial local data + `fallbackError.code = hicelltek_auth`. |
+| 7. Quota exceeded | PASS (mock) | 429; not triggered live to avoid exhausting the quota. |
+| 8. MongoDB unavailable | PASS (mock) | Falls back to HiCellTek; 503 if both fail. |
+| 12. Stock-in after identification | PASS | Smoke test buys a device using looked-up fields, then cleans up. |
+| Admin import endpoints | PASS | status/history return 200 with session; unauthenticated import returns 401. |

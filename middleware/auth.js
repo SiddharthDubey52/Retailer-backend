@@ -17,3 +17,7 @@ export async function requireAuth(request, response, next) {
     return response.status(401).json({ message: 'Please sign in to continue.' })
   }
 }
+export function requireAdmin(request, response, next) {
+  if (request.user?.role !== 'ADMIN') return response.status(403).json({ message: 'Only an administrator can do this.' })
+  return next()
+}
