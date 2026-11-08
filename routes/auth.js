@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { User } from '../models/index.js'
 import { requireAuth } from '../middleware/auth.js'
+import { revokeFinancialAccess } from '../services/financialAccess.js'
 
 const router = Router()
 const passwordSchema = z.string().min(10).max(128)
@@ -67,7 +68,13 @@ router.post('/login', async (request, response, next) => {
   } catch (error) { next(error) }
 })
 
-router.post('/logout', (_request, response) => {
+router.post('/logout', async (request, response) => {
+  // Logging out also locks financial information.
+  const header = request.headers.authorization || ''
+  const token = request.cookies?.shop_session || (header.startsWith('Bearer ') ? header.slice(7) : null)
+  let userId
+  try { userId = token ? jwt.verify(token, process.env.JWT_SECRET).sub : null } catch { userId = null }
+  await revokeFinancialAccess(userId, response).catch(() => {})
   response.clearCookie('shop_session', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' })
   response.status(204).end()
 })

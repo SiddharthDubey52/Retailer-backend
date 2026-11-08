@@ -2,6 +2,7 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 import { z } from 'zod'
 import { Expense, Inventory, Sale } from '../models/index.js'
+import { financialAccess, redactSale } from '../services/financialAccess.js'
 import { pagination, writeAudit } from '../utils.js'
 import { isValidImei } from '../validation.js'
 
@@ -23,8 +24,8 @@ router.get('/', async (request, response, next) => {
       ...(request.query.from && { $gte: new Date(request.query.from) }),
       ...(request.query.to && { $lte: new Date(`${request.query.to}T23:59:59.999`) }),
     }
-    const [items, total] = await Promise.all([Sale.find(query).sort({ soldAt: -1 }).skip(skip).limit(limit), Sale.countDocuments(query)])
-    response.json({ items, page, limit, total, pages: Math.ceil(total / limit) })
+    const [items, total, { granted }] = await Promise.all([Sale.find(query).sort({ soldAt: -1 }).skip(skip).limit(limit), Sale.countDocuments(query), financialAccess(request)])
+    response.json({ items: items.map((sale) => redactSale(sale, granted)), financialLocked: !granted, page, limit, total, pages: Math.ceil(total / limit) })
   } catch (error) { next(error) }
 })
 
@@ -32,7 +33,8 @@ router.get('/:id', async (request, response, next) => {
   try {
     const sale = await Sale.findById(request.params.id)
     if (!sale) return response.status(404).json({ message: 'Sale not found.' })
-    response.json({ sale })
+    const { granted } = await financialAccess(request)
+    response.json({ sale: redactSale(sale, granted), financialLocked: !granted })
   } catch (error) { next(error) }
 })
 
@@ -74,7 +76,9 @@ router.post('/', async (request, response, next) => {
       await writeAudit(request.user.id, 'MOBILE_SOLD', 'Inventory', item.id, { sale: sale.id, sellingPrice: data.sellingPrice }, session)
       createdSale = sale
     })
-    response.status(201).json({ sale: createdSale })
+    // Profit is always computed on the server; it is only returned when financial access is granted.
+    const { granted } = await financialAccess(request)
+    response.status(201).json({ sale: redactSale(createdSale, granted), financialLocked: !granted })
   } catch (error) { next(error) }
   finally { await session.endSession() }
 })

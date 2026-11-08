@@ -108,6 +108,17 @@ try {
   const localLookup = await request('/device-lookup', { method: 'POST', body: { imei: lookupImei }, cookie })
   const found = localLookup.data?.data
   record('local TAC lookup (complete record, no API call)', localLookup.response.status === 200 && localLookup.data?.source === 'local_database' && localLookup.data?.complete === true && Boolean(found?.brandName && found?.deviceName && found?.modelNumber), JSON.stringify(localLookup.data))
+  // Stock entry, sales and reports need financial access once a Financial PIN is set.
+  const finStatus = await request('/financial/status', { cookie })
+  if (finStatus.data?.pinEnabled) {
+    if (!process.env.SMOKE_FINANCIAL_PIN) {
+      skip('stock-in, sales, profit, dealers, reports', 'A Financial PIN is set on this database. Set SMOKE_FINANCIAL_PIN to run these here, or run npm run test:financial / npm run test:invoices (isolated databases).')
+      throw Object.assign(new Error('skip-rest'), { skipRest: true })
+    }
+    const unlock = await request('/financial/verify', { method: 'POST', body: { pin: process.env.SMOKE_FINANCIAL_PIN }, cookie })
+    record('financial unlock with SMOKE_FINANCIAL_PIN', unlock.response.status === 200, `HTTP ${unlock.response.status}`)
+    cookie = `${cookie}; ${(unlock.response.headers.get('set-cookie') || '').split(';')[0]}`
+  }
   identifiedModel = { brand: found.brandName, model: found.deviceName, modelNumber: found.modelNumber }
   createdIdentifiedModel = !(await DeviceModel.exists(identifiedModel))
   const identifiedPurchase = await request('/inventory', {
@@ -191,8 +202,10 @@ try {
   const dealerDelete = await request(`/dealers/${dealerId}`, { method: 'DELETE', cookie })
   record('dealer with history archived', dealerDelete.response.status === 200)
 } catch (error) {
-  console.error(error.message)
-  process.exitCode = 1
+  if (!error.skipRest) {
+    console.error(error.message)
+    process.exitCode = 1
+  }
 } finally {
   if (saleId) {
     await Expense.deleteMany({ sale: saleId }).catch(() => {})

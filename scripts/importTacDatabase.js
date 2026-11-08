@@ -1,4 +1,4 @@
-// Imports licensed public TAC datasets into MongoDB collection "TACRecords".
+// Imports licensed public TAC datasets into collection "TACRecords" on the TAC cluster (TAC_MONGODB_URI).
 //
 //   node scripts/importTacDatabase.js                       # download all sources and import
 //   node scripts/importTacDatabase.js --dry-run             # parse + report only, no writes
@@ -9,8 +9,7 @@
 // Safe to repeat: records are upserted, never deleted, and valid values are never blanked.
 import 'dotenv/config'
 import { writeFile } from 'node:fs/promises'
-import mongoose from 'mongoose'
-import { connectDatabase } from '../config/database.js'
+import { closeDatabases, connectTacDatabase } from '../config/database.js'
 import { runTacImport } from '../services/tac/importer.js'
 
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -51,7 +50,7 @@ function printReport(report) {
 }
 
 try {
-  if (!args['dry-run']) await connectDatabase()
+  if (!args['dry-run']) await connectTacDatabase({ required: true })
   const report = await runTacImport({
     dryRun: Boolean(args['dry-run']),
     sources: typeof args.source === 'string' ? args.source.split(',') : undefined,
@@ -68,5 +67,5 @@ try {
   console.error(`TAC import failed: ${error.message}`)
   process.exitCode = 1
 } finally {
-  if (mongoose.connection.readyState) await mongoose.disconnect()
+  await closeDatabases()
 }

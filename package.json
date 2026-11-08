@@ -14,7 +14,11 @@
     "test:smoke": "node scripts/smokeTest.js",
     "lint": "eslint .",
     "import:tac:dry": "node scripts/importTacDatabase.js --dry-run",
-    "test:tac": "node scripts/testTacSystem.js"
+    "test:tac": "node scripts/testTacSystem.js",
+    "pin:reset": "node scripts/resetFinancialPin.js",
+    "test:financial": "node scripts/testFinancialAndStockOut.js",
+    "test:invoices": "node scripts/testPurchaseInvoices.js",
+    "tac:migrate": "node scripts/migrateTacToCluster.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -26,6 +30,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.12.0",
+    "multer": "^2.5.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

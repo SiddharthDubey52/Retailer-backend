@@ -1,12 +1,14 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import { requireAdmin } from '../middleware/auth.js'
-import { TACImportLog, TACRecord } from '../models/index.js'
+import { isTacConnected } from '../config/database.js'
+import { TACImportLog, TACRecord } from '../models/tac.js'
 import { identifyDevice } from '../services/deviceLookup.js'
 import { runTacImport } from '../services/tac/importer.js'
 import { TAC_SOURCES } from '../services/tac/sources.js'
 
 const router = Router()
+const tacUnavailable = (response) => response.status(503).json({ code: 'TAC_DB_UNAVAILABLE', message: 'The TAC database cluster is temporarily unavailable.' })
 
 // POST /api/device-lookup  { imei } -> { success, data: { brandName, deviceName, modelNumber }, source }
 router.post('/', rateLimit({ windowMs: 60 * 1000, limit: 60 }), async (request, response, next) => {
@@ -20,6 +22,7 @@ router.get('/tac/:tac', async (request, response, next) => {
   try {
     const tac = String(request.params.tac)
     if (!/^\d{8}$/.test(tac)) return response.status(400).json({ message: 'TAC must contain exactly 8 digits.' })
+    if (!isTacConnected()) return tacUnavailable(response)
     const record = await TACRecord.findOne({ tac }).select('-__v').lean()
     if (!record) return response.status(404).json({ message: 'TAC not found in the local database.' })
     response.json({ record })
@@ -31,6 +34,7 @@ router.get('/tac/:tac', async (request, response, next) => {
 // Starts an import in the background and returns its id. Prefer the CLI on small hosts:
 // a full import holds ~300k records in memory.
 router.post('/import', requireAdmin, async (request, response, next) => {
+  if (!isTacConnected()) return tacUnavailable(response)
   const known = TAC_SOURCES.map((s) => s.name)
   const sources = Array.isArray(request.body?.sources) ? request.body.sources.filter((s) => known.includes(s)) : undefined
   let started = false
@@ -45,6 +49,7 @@ router.post('/import', requireAdmin, async (request, response, next) => {
 })
 
 router.get('/import/status', requireAdmin, async (_request, response, next) => {
+  if (!isTacConnected()) return tacUnavailable(response)
   try {
     const [total, complete, bySource, latest, running] = await Promise.all([
       TACRecord.estimatedDocumentCount(),
@@ -67,6 +72,7 @@ router.get('/import/status', requireAdmin, async (_request, response, next) => {
 })
 
 router.get('/import/history', requireAdmin, async (_request, response, next) => {
+  if (!isTacConnected()) return tacUnavailable(response)
   try {
     const items = await TACImportLog.find({}).sort({ startedAt: -1 }).limit(25)
       .select('status trigger startedAt finishedAt totals error sources.source sources.version sources.discovered sources.valid sources.imported sources.updated sources.error').lean()
@@ -75,6 +81,7 @@ router.get('/import/history', requireAdmin, async (_request, response, next) => 
 })
 
 router.get('/import/history/:id', requireAdmin, async (request, response, next) => {
+  if (!isTacConnected()) return tacUnavailable(response)
   try {
     const item = await TACImportLog.findById(request.params.id).lean()
     if (!item) return response.status(404).json({ message: 'Import not found.' })

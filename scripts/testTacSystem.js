@@ -4,9 +4,8 @@
 //   node scripts/testTacSystem.js --no-db    # unit tests only
 import 'dotenv/config'
 import assert from 'node:assert/strict'
-import mongoose from 'mongoose'
-import { connectDatabase } from '../config/database.js'
-import { TACImportLog, TACRecord } from '../models/index.js'
+import { closeDatabases, connectTacDatabase, tacConnection } from '../config/database.js'
+import { TACImportLog, TACRecord } from '../models/tac.js'
 import { identifyDevice, MANUAL_MESSAGE } from '../services/deviceLookup.js'
 import { lookupWithHiCellTek, mapHiCellTekResponse } from '../services/hiCellTek.js'
 import { runTacImport } from '../services/tac/importer.js'
@@ -154,9 +153,9 @@ const fakeSource = (name, priority, buffer, parse) => ({
 const secondary = (records) => async (_buffer, stats) => { stats.discovered += records.length; return records.map((r) => ({ releaseYear: null, sourceRecordDate: null, ...r })) }
 
 if (!process.argv.includes('--no-db')) {
-  await connectDatabase()
-  const TestRecord = mongoose.model('TACRecordTest', TACRecord.schema.clone(), 'TACRecords_test')
-  const TestLog = mongoose.model('TACImportLogTest', TACImportLog.schema.clone(), 'TACImportLogs_test')
+  await connectTacDatabase({ required: true })
+  const TestRecord = tacConnection.model('TACRecordTest', TACRecord.schema.clone(), 'TACRecords_test')
+  const TestLog = tacConnection.model('TACImportLogTest', TACImportLog.schema.clone(), 'TACImportLogs_test')
   const opts = (sourceList) => ({ recordModel: TestRecord, logModel: TestLog, sourceList })
   try {
     await TestRecord.deleteMany({}); await TestLog.deleteMany({})
@@ -216,7 +215,7 @@ if (!process.argv.includes('--no-db')) {
   } finally {
     await TestRecord.collection.drop().catch(() => {})
     await TestLog.collection.drop().catch(() => {})
-    await mongoose.disconnect()
+    await closeDatabases()
   }
 }
 

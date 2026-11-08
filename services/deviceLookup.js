@@ -1,6 +1,6 @@
 // Hybrid device identification: local TACRecords -> HiCellTek API -> manual entry.
-import mongoose from 'mongoose'
-import { TACRecord } from '../models/index.js'
+import { isTacConnected } from '../config/database.js'
+import { TACRecord } from '../models/tac.js'
 import { isValidImei } from '../validation.js'
 import { lookupWithHiCellTek } from './hiCellTek.js'
 import { compareKey } from './tac/normalize.js'
@@ -14,7 +14,7 @@ const missingOf = (data) => FIELDS.filter((f) => !data[f])
 const sameBrand = (a, b) => { const [x, y] = [compareKey(a), compareKey(b)]; return !x || !y || x.includes(y) || y.includes(x) }
 
 export async function findLocalTac(tac) {
-  if (mongoose.connection.readyState !== 1) throw Object.assign(new Error('MongoDB is not connected.'), { code: 'db_unavailable' })
+  if (!isTacConnected()) throw Object.assign(new Error('TAC database cluster is not connected.'), { code: 'db_unavailable' })
   return TACRecord.findOne({ tac }).select('tac brandName deviceName modelNumber source').maxTimeMS(3000).lean()
 }
 

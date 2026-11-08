@@ -1,6 +1,6 @@
 // TAC import engine: download -> parse -> validate -> dedupe -> resolve conflicts -> upsert -> report.
 // Safe to run repeatedly. It never deletes records and never replaces a value with an empty one.
-import { TACImportLog, TACRecord } from '../../models/index.js'
+import { TACImportLog, TACRecord } from '../../models/tac.js'
 import { compareKey } from './normalize.js'
 import { TAC_SOURCES } from './sources.js'
 

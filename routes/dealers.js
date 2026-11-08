@@ -1,12 +1,13 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { Dealer, Inventory } from '../models/index.js'
+import { Dealer, Inventory, PurchaseInvoice } from '../models/index.js'
+import { financialAccess } from '../services/financialAccess.js'
 import { writeAudit } from '../utils.js'
 
 const router = Router()
 const dealerSchema = z.object({ name: z.string().trim().min(2).max(120), phone: z.string().trim().max(30).optional().default(''), address: z.string().trim().max(300).optional().default('') })
 
-router.get('/', async (_request, response, next) => {
+router.get('/', async (request, response, next) => {
   try {
     const dealers = await Dealer.aggregate([
       { $match: { archivedAt: null } },
@@ -15,7 +16,8 @@ router.get('/', async (_request, response, next) => {
       { $project: { purchases: 0 } },
       { $sort: { name: 1 } },
     ])
-    response.json({ items: dealers })
+    const { granted } = await financialAccess(request)
+    response.json({ items: granted ? dealers : dealers.map((dealer) => ({ ...dealer, totalPurchaseAmount: null })), financialLocked: !granted })
   } catch (error) { next(error) }
 })
 
@@ -36,6 +38,7 @@ router.patch('/:id', async (request, response, next) => {
     const dealer = await Dealer.findOneAndUpdate({ _id: request.params.id, archivedAt: null }, { $set: parsed.data }, { new: true, runValidators: true })
     if (!dealer) return response.status(404).json({ message: 'Dealer not found.' })
     await Inventory.updateMany({ dealer: dealer.id }, { $set: { dealerName: dealer.name } })
+    await PurchaseInvoice.updateMany({ dealer: dealer.id }, { $set: { dealerName: dealer.name } })
     await writeAudit(request.user.id, 'DEALER_UPDATED', 'Dealer', dealer.id, parsed.data)
     response.json({ dealer })
   } catch (error) { next(error) }
@@ -45,7 +48,7 @@ router.delete('/:id', async (request, response, next) => {
   try {
     const dealer = await Dealer.findById(request.params.id)
     if (!dealer || dealer.archivedAt) return response.status(404).json({ message: 'Dealer not found.' })
-    const hasPurchases = await Inventory.exists({ dealer: dealer.id })
+    const hasPurchases = await Inventory.exists({ dealer: dealer.id }) || await PurchaseInvoice.exists({ dealer: dealer.id })
     if (hasPurchases) dealer.archivedAt = new Date()
     else await dealer.deleteOne()
     if (hasPurchases) await dealer.save()

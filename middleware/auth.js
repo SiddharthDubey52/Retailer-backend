@@ -12,6 +12,7 @@ export async function requireAuth(request, response, next) {
     if (!user) return response.status(401).json({ message: 'Your session is no longer valid.' })
 
     request.user = user
+    request.authToken = token // used to bind financial unlocks to this login session
     return next()
   } catch {
     return response.status(401).json({ message: 'Please sign in to continue.' })
